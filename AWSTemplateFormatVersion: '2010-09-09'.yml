@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  InputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: input-bucket-excel-analysis
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  OutputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: output-bucket-excel-analysis
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  MyLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: 'index.handler'
+      Role: !GetAtt MyLambdaExecutionRole.Arn
+      FunctionName: 'MyExcelAnalysisFunction'
+      Runtime: 'python3.8'
+      Timeout: 60
+      MemorySize: 128
+      Code:
+        S3Bucket: 'your-lambda-code-bucket'
+        S3Key: 'path/to/your/lambda/code.zip'
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref InputBucket
+          OUTPUT_BUCKET: !Ref OutputBucket
+
+  MyLambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'LambdaS3Policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource:
+                  - !GetAtt InputBucket.Arn
+                  - !GetAtt OutputBucket.Arn
+
+  MyBucketEvent:
+    Type: 'AWS::S3::BucketNotification'
+    Properties:
+      Bucket: !Ref InputBucket
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Function: !GetAtt MyLambdaFunction.Arn
+
+  InputBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    DependsOn: InputBucket
+    Properties:
+      Bucket: !Ref InputBucket
+      PolicyDocument:
+        Statement:
+          - Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${InputBucket}/*'
+            Condition:
+              StringNotEqualsIfExists:
+                'aws:PrincipalOrgID': 'YOUR_ORG_ID'
+
+  OutputBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    DependsOn: OutputBucket
+    Properties:
+      Bucket: !Ref OutputBucket
+      PolicyDocument:
+        Statement:
+          - Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${OutputBucket}/*'
+            Condition:
+              StringNotEqualsIfExists:
+                'aws:PrincipalOrgID': 'YOUR_ORG_ID'

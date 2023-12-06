@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  InputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: input-bucket-excel-analysis
+
+  OutputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: output-bucket-excel-analysis
+
+  MyLambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'LambdaS3Policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource:
+                  - !GetAtt InputBucket.Arn
+                  - !GetAtt OutputBucket.Arn
+
+  MyLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    DependsOn: [InputBucket, OutputBucket, MyLambdaExecutionRole]
+    Properties:
+      Handler: 'index.handler'
+      Role: !GetAtt MyLambdaExecutionRole.Arn
+      FunctionName: 'MyExcelAnalysisFunction'
+      Runtime: 'python3.8'
+      Timeout: 3
+      MemorySize: 128
+      Code:
+        S3Bucket: 'your-lambda-code-bucket'
+        S3Key: 'path/to/your/lambda/code.zip'
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref InputBucket
+          OUTPUT_BUCKET: !Ref OutputBucket
+
+  MyLambdaEventMapping:
+    Type: 'AWS::Lambda::EventSourceMapping'
+    DependsOn: [MyLambdaFunction]
+    Properties:
+      BatchSize: 1
+      EventSourceArn: !GetAtt InputBucket.Arn
+      FunctionName: !GetAtt MyLambdaFunction.Arn
+      StartingPosition: 'LATEST'
